@@ -1,1 +1,0 @@
-Taruh file model.json dan weights.bin di folder ini
