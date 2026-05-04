@@ -219,7 +219,7 @@ export default function TranslatePage() {
 
   // --- FUNGSI HARDWARE: MIKROFON & SPEAKER ---
   const startListening = () => {
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Maaf, browser Anda belum mendukung fitur Voice-to-Text.");
       return;
