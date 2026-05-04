@@ -25,7 +25,7 @@ export default function TranslatePage() {
   // Ref untuk nyawa AI (Mencegah re-render berlebih)
   const modelRef = useRef<tf.LayersModel | null>(null);
   const classNamesRef = useRef<string[]>([]);
-  const handsRef = useRef<Hands | null>(null);
+  const handsRef = useRef<any>(null);
   
   // Ref untuk logika urutan frame (Sequence)
   const sequenceRef = useRef<number[][]>([]);
