@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Hand, Mic, Keyboard, Volume2, HelpCircle, Camera as CameraIcon, RefreshCw, Play, Square, X } from "lucide-react";
+import { ArrowLeft, Mic, Keyboard, Volume2, HelpCircle, Camera as CameraIcon, RefreshCw, Play, Square, X, Bookmark } from "lucide-react";
+import { Hand } from "lucide-react";
 import Link from "next/link";
 import * as tf from '@tensorflow/tfjs';
 
@@ -11,29 +12,26 @@ export default function TranslatePage() {
   const [isTyping, setIsTyping] = useState(false);
   const [isCheckingMemory, setIsCheckingMemory] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [fontSize, setFontSize] = useState(32);
 
-  // State Teman Dengar
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState(""); 
   
-  // State & Ref AI
   const [isModelReady, setIsModelReady] = useState(false);
   const [detectedSign, setDetectedSign] = useState(""); 
+  const [sentence, setSentence] = useState<string[]>([]);
   const [isAutoSpeak, setIsAutoSpeak] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // Ref untuk nyawa AI (Mencegah re-render berlebih)
-  const modelRef = useRef<tf.LayersModel | null>(null);
+  const modelRef = useRef<tf.GraphModel | null>(null);
   const classNamesRef = useRef<string[]>([]);
-  const handsRef = useRef<any>(null);
+  const holisticRef = useRef<any>(null);
   
-  // Ref untuk logika urutan frame (Sequence)
   const sequenceRef = useRef<number[][]>([]);
-  const lastKeypointsRef = useRef<number[]>(new Array(126).fill(0));
+  const lastKeypointsRef = useRef<number[]>(new Array(258).fill(0));
   const isPredictingRef = useRef(false);
   const animationFrameId = useRef<number | null>(null);
 
-  // 1. Cek Tutorial
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem("signtara_tutorial_seen");
     if (hasSeenTutorial === "true") {
@@ -42,39 +40,35 @@ export default function TranslatePage() {
     setIsCheckingMemory(false);
   }, []);
 
-  // 2. Load "Otak" (TensorFlow) dan "Mata" (MediaPipe) saat komponen dimuat
   useEffect(() => {
     const loadAIModel = async () => {
       try {
-        // A. Load Daftar Kosakata (Kamus)
         const classResponse = await fetch('/model/class_names.json');
         classNamesRef.current = await classResponse.json();
 
-        // B. Load Otak AI (TensorFlow)
-        const model = await tf.loadLayersModel('/model/model.json');
+        const model = await tf.loadGraphModel('/model/model.json?v=17');
         modelRef.current = model;
 
-        // C. Load Mata AI (MediaPipe Hands) secara dinamis untuk menghindari error Turbopack
-        const mediapipe = await import('@mediapipe/hands');
-        const Hands = mediapipe.Hands || (mediapipe as any).default.Hands || (window as any).Hands;
+        const mediapipe = await import('@mediapipe/holistic');
+        const Holistic = mediapipe.Holistic || (mediapipe as any).default.Holistic || (window as any).Holistic;
 
-        const hands = new Hands({
-          locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        const holistic = new Holistic({
+          locateFile: (file: string) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
           }
         });
         
-        hands.setOptions({
-          maxNumHands: 2,
+        holistic.setOptions({
           modelComplexity: 1,
+          smoothLandmarks: true,
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5
         });
 
-        hands.onResults(handleHandResults);
-        handsRef.current = hands;
+        holistic.onResults(handleHolisticResults);
+        holisticRef.current = holistic;
 
-        console.log("Semua sistem AI (TensorFlow & MediaPipe) siap!");
+        console.log("Semua sistem AI (TensorFlow & MediaPipe Holistic) siap!");
         setIsModelReady(true);
       } catch (error) {
         console.error("Gagal memuat model AI:", error);
@@ -83,45 +77,35 @@ export default function TranslatePage() {
 
     loadAIModel();
     
-    // Cleanup saat keluar halaman
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
   }, []);
 
-  // 3. Matikan kamera jika pindah tab
   useEffect(() => {
     if (activeTab === "dengar") {
       stopCamera();
     }
   }, [activeTab]);
 
-  // =========================================================================
-  // --- FUNGSI UTAMA AI: MEMBACA TANGAN & MENEBAK ---
-  // =========================================================================
-  const handleHandResults = async (results: any) => {
-    // A. Ekstraksi 126 Titik Koordinat (Persis seperti Python)
-    let lh = new Array(63).fill(0);
-    let rh = new Array(63).fill(0);
-
-    if (results.multiHandLandmarks && results.multiHandedness) {
-      for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-        const handLandmarks = results.multiHandLandmarks[i];
-        const label = results.multiHandedness[i].label; // 'Left' atau 'Right'
-        
-        const keypoints = handLandmarks.map((lm: any) => [lm.x, lm.y, lm.z]).flat();
-
-        if (label === 'Left') {
-          lh = keypoints;
-        } else {
-          rh = keypoints;
-        }
-      }
+  const handleHolisticResults = async (results: any) => {
+    let pose = new Array(132).fill(0);
+    if (results.poseLandmarks) {
+      pose = results.poseLandmarks.map((lm: any) => [lm.x, lm.y, lm.z, lm.visibility]).flat();
     }
 
-    let currentKeypoints = [...lh, ...rh];
+    let lh = new Array(63).fill(0);
+    if (results.leftHandLandmarks) {
+      lh = results.leftHandLandmarks.map((lm: any) => [lm.x, lm.y, lm.z]).flat();
+    }
 
-    // B. Logika Anti-Freeze (Gunakan frame sebelumnya jika tiba-tiba kosong)
+    let rh = new Array(63).fill(0);
+    if (results.rightHandLandmarks) {
+      rh = results.rightHandLandmarks.map((lm: any) => [lm.x, lm.y, lm.z]).flat();
+    }
+
+    let currentKeypoints = [...pose, ...lh, ...rh];
+
     const isAllZeros = currentKeypoints.every(val => val === 0);
     const wasLastAllZeros = lastKeypointsRef.current.every(val => val === 0);
     
@@ -131,70 +115,75 @@ export default function TranslatePage() {
       lastKeypointsRef.current = currentKeypoints;
     }
 
-    // C. Masukkan ke dalam kumpulan Sequence (20 Frame)
     sequenceRef.current.push(currentKeypoints);
-    if (sequenceRef.current.length > 20) {
-      sequenceRef.current.shift(); // Buang yang paling lama
+    if (sequenceRef.current.length > 30) {
+      sequenceRef.current.shift();
     }
 
-    // D. Lakukan Prediksi jika sudah terkumpul 20 Frame
-    if (sequenceRef.current.length === 20 && !isPredictingRef.current && modelRef.current && classNamesRef.current.length > 0) {
+    if (sequenceRef.current.length === 30 && !isPredictingRef.current && modelRef.current && classNamesRef.current.length > 0) {
       isPredictingRef.current = true;
       
       try {
-        // Ubah bentuk data JS ke Tensor AI: Shape [1, 20, 126]
         const inputTensor = tf.tensor3d([sequenceRef.current]);
         
-        // AI Menebak
-        const prediction = modelRef.current.predict(inputTensor) as tf.Tensor;
+        const prediction = modelRef.current.execute(inputTensor) as tf.Tensor;
         const scores = await prediction.data();
         
-        // Cari tebakan dengan skor tertinggi
         const maxScore = Math.max(...Array.from(scores));
         const maxIndex = scores.indexOf(maxScore);
         
-        // Hapus sampah memori agar web tidak lemot (SANGAT PENTING!)
         tf.dispose([inputTensor, prediction]);
 
-        // Jika yakin di atas 60%, tampilkan hasilnya!
         if (maxScore > 0.6) {
-          setDetectedSign(classNamesRef.current[maxIndex].toUpperCase());
+          const newSign = classNamesRef.current[maxIndex].toUpperCase();
+          
+          console.log("Skor tertinggi saat ini:", maxScore, "Hasil:", newSign);
+
+          setSentence(prev => {
+            if (prev[prev.length - 1] !== newSign) {
+              return [...prev, newSign];
+            }
+            return prev;
+          });
         }
 
       } catch (err) {
         console.error("Error saat prediksi AI:", err);
       } finally {
-        // Buka gembok prediksi agar bisa menebak kata selanjutnya
-        setTimeout(() => { isPredictingRef.current = false; }, 300); // Jeda 0.3 detik per kata
+        setTimeout(() => { isPredictingRef.current = false; }, 2000);
       }
     }
   };
 
-  // Looping pengiriman gambar dari video ke MediaPipe
   const processVideoFrame = async () => {
-    if (videoRef.current && videoRef.current.readyState >= 2 && handsRef.current) {
-      await handsRef.current.send({ image: videoRef.current });
+    if (
+      videoRef.current && 
+      videoRef.current.readyState >= 2 && 
+      videoRef.current.videoWidth > 0 &&
+      videoRef.current.videoHeight > 0 &&
+      holisticRef.current
+    ) {
+      await holisticRef.current.send({ image: videoRef.current });
     }
-    // Terus berputar selama kamera aktif
+    
     if (videoRef.current && videoRef.current.srcObject) {
       animationFrameId.current = requestAnimationFrame(processVideoFrame);
     }
   };
 
-  // --- FUNGSI HARDWARE: KAMERA ---
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "user" } 
+      }); 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
       setIsCameraActive(true);
       
-      // Reset sequence saat kamera baru nyala
       sequenceRef.current = [];
-      lastKeypointsRef.current = new Array(126).fill(0);
+      lastKeypointsRef.current = new Array(258).fill(0);
       
-      // Mulai Looping AI
       processVideoFrame();
 
     } catch (err) {
@@ -217,7 +206,6 @@ export default function TranslatePage() {
     setIsCameraActive(false);
   };
 
-  // --- FUNGSI HARDWARE: MIKROFON & SPEAKER ---
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -238,7 +226,8 @@ export default function TranslatePage() {
   };
 
   const speakDetectedSign = () => {
-    const textToSpeak = detectedSign || "Menunggu isyarat"; 
+    const textToSpeak = sentence.length > 0 ? sentence.join(" ") : "Belum ada isyarat yang terdeteksi";
+    
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       utterance.lang = 'id-ID'; 
@@ -249,13 +238,67 @@ export default function TranslatePage() {
     }
   };
 
-  const handleClearText = () => setTranscript("");
-  // Jika Auto-Speak menyala dan ada teks baru, langsung bunyikan!
+  const saveToHistory = (text: string, mode: string) => {
+    if (!text || text === "MENUNGGU ISYARAT...") return;
+    
+    const newItem = {
+      id: Date.now(),
+      text: text,
+      mode: mode,
+      timestamp: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }) + ", " + new Date().toLocaleDateString("id-ID")
+    };
+
+    const existingHistory = JSON.parse(localStorage.getItem("signtara_history") || "[]");
+    
+    const updatedHistory = [newItem, ...existingHistory].slice(0, 50); 
+    
+    localStorage.setItem("signtara_history", JSON.stringify(updatedHistory));
+  };
+
+  const handleClearText = () => {
+    setTranscript("");
+  };
+
   useEffect(() => {
-    if (isAutoSpeak && detectedSign) {
+    if (isAutoSpeak && sentence.length > 0) {
       speakDetectedSign();
     }
-  }, [detectedSign, isAutoSpeak]);
+  }, [sentence, isAutoSpeak]);
+
+  useEffect(() => {
+    const reloadText = localStorage.getItem("signtara_reload_text");
+    const reloadMode = localStorage.getItem("signtara_reload_mode");
+
+    if (reloadText && reloadMode) {
+      if (reloadMode === "Teman Tuli") {
+        setActiveTab("tuli");
+        setSentence(reloadText.split(" ")); 
+      } else if (reloadMode === "Teman Dengar") {
+        setActiveTab("dengar");
+        setTranscript(reloadText);
+      }
+      
+      localStorage.removeItem("signtara_reload_text");
+      localStorage.removeItem("signtara_reload_mode");
+    }
+  }, []);
+
+  useEffect(() => {
+    const lastTab = localStorage.getItem("signtara_active_tab");
+    if (lastTab) setActiveTab(lastTab);
+
+    const draftText = localStorage.getItem("signtara_draft_text");
+    if (draftText) setTranscript(draftText);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("signtara_active_tab", activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem("signtara_draft_text", transcript);
+  }, [transcript]);
+
   const handleStartFromTutorial = () => {
     localStorage.setItem("signtara_tutorial_seen", "true");
     setShowTutorial(false);
@@ -323,40 +366,75 @@ export default function TranslatePage() {
               </div>
 
               <div className="bg-white rounded-[2.5rem] p-6 shadow-lg flex flex-col items-center relative min-h-[180px] border border-orange-50 mt-auto mb-2 shrink-0">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Detected Sign</p>
-                <h2 className={`${detectedSign.length > 15 ? 'text-xl' : 'text-3xl'} font-black text-[#5C3A21] text-center mb-6 leading-tight transition-all duration-300`}>
-                  {!isModelReady ? (
-                    <span className="flex items-center gap-2 animate-pulse text-gray-400 text-2xl">
-                      <RefreshCw className="animate-spin" size={24}/> MEMUAT MODEL AI...
-                    </span>
-                  ) : detectedSign ? (
-                    detectedSign
-                  ) : (
-                    <span className="text-gray-300 text-2xl">MENUNGGU ISYARAT...</span>
-                  )}
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Isyarat Terdeteksi</p>
+                <h2 className="font-black text-[#5C3A21] text-center mb-6 leading-tight transition-all duration-75"
+                  style={{ fontSize: `${fontSize}px` }}
+                >
+                  {sentence.length > 0 
+                    ? sentence.join(" ") 
+                    : <span className="text-gray-300 text-xl animate-pulse">MENUNGGU ISYARAT...</span>
+                  }
                 </h2>
                 <div className="w-full flex items-center justify-between gap-4 mt-auto">
-                  <span className="text-xs font-bold text-gray-300">Tr</span>
-                  <input type="range" min="1" max="100" defaultValue="40" className="flex-grow h-1.5 bg-gray-100 rounded-full appearance-none accent-[#F97316]" />
-                  <span className="text-lg font-bold text-gray-400">Tt</span>
-                  <button 
-                    onClick={() => setIsAutoSpeak(!isAutoSpeak)}
-                    className={`p-3 rounded-full transition-colors active:scale-95 ${isAutoSpeak ? 'bg-green-500 text-white shadow-md' : 'bg-[#EBF5EE] text-green-600 hover:bg-green-100'}`}
-                    title={isAutoSpeak ? "Matikan Suara Otomatis" : "Nyalakan Suara Otomatis"}
-                  >
-                    <Volume2 size={20} />
-                  </button>
+                  <span className="text-sm font-bold text-gray-400">tt</span>
+  
+                  <input 
+                    type="range" 
+                    min="16"
+                    max="64"
+                    value={fontSize} 
+                    onChange={(e) => setFontSize(Number(e.target.value))} 
+                    className="flex-grow h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#F97316]" 
+                  />
+                  
+                  <span className="text-lg font-bold text-gray-400">TT</span>
+                  
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        saveToHistory(sentence.join(" "), "Teman Tuli");
+                        alert("Tersimpan di Riwayat!"); 
+                      }}
+                      className="bg-[#E6F3FA] p-3 rounded-full text-blue-600 hover:bg-blue-100 transition-colors active:scale-95" 
+                      title="Simpan ke Riwayat"
+                    >
+                      <Bookmark size={20} />
+                    </button>
+                    <button 
+                      onClick={() => setIsAutoSpeak(!isAutoSpeak)}
+                      className={`p-3 rounded-full transition-colors active:scale-95 ${isAutoSpeak ? 'bg-green-500 text-white shadow-md' : 'bg-[#EBF5EE] text-green-600 hover:bg-green-100'}`}
+                      title={isAutoSpeak ? "Matikan Suara Otomatis" : "Nyalakan Suara Otomatis"}
+                    >
+                      <Volume2 size={20} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col h-full animate-in slide-in-from-right-4 duration-300">
               <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 shadow-md flex flex-col flex-1 items-center relative border border-orange-50 mb-6 overflow-hidden">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 shrink-0">Detected Voice</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 shrink-0">Suara Terdeteksi</p>
                 {transcript.length > 0 && (
-                  <button onClick={handleClearText} className="absolute top-6 right-6 text-gray-300 hover:text-red-500 transition-colors p-2 bg-gray-50 rounded-full z-10 shrink-0" title="Hapus Teks">
-                    <X size={20} />
-                  </button>
+                  <div className="absolute top-4 right-4 flex gap-2 z-10 shrink-0">
+                    <button 
+                      onClick={() => {
+                        saveToHistory(transcript, "Teman Dengar");
+                        alert("Tersimpan di Riwayat!"); 
+                      }} 
+                      className="p-2 bg-[#E6F3FA] text-blue-600 rounded-full hover:bg-blue-100 transition-colors active:scale-95" 
+                      title="Simpan ke Riwayat"
+                    >
+                      <Bookmark size={20} />
+                    </button>
+                    <button 
+                      onClick={handleClearText} 
+                      className="p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors active:scale-95" 
+                      title="Hapus Teks"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
                 )}
                 <div className="w-full flex-grow overflow-y-auto flex flex-col justify-center px-2 pb-2">
                   {isTyping ? (
@@ -368,8 +446,12 @@ export default function TranslatePage() {
                       className="w-full h-full min-h-[150px] bg-gray-50 rounded-2xl text-[#5C3A21] font-bold text-xl focus:outline-none focus:ring-2 focus:ring-[#F97316] transition-all resize-none p-4 break-words"
                     />
                   ) : (
-                    <h2 className="text-2xl font-bold text-[#5C3A21] text-center leading-relaxed m-auto w-full break-words break-all sm:break-normal whitespace-pre-wrap">
-                      {transcript || <span className="text-gray-300 font-medium text-xl">Silakan tekan mikrofon untuk berbicara...</span>}
+                    <h2 
+                      onClick={() => setIsTyping(true)}
+                      title="Ketuk untuk mengetik manual"
+                      className="text-2xl font-bold text-[#5C3A21] text-center leading-relaxed m-auto w-full break-words break-all sm:break-normal whitespace-pre-wrap cursor-pointer hover:bg-orange-50/50 p-4 rounded-2xl transition-colors"
+                    >
+                      {transcript || <span className="text-gray-300 font-medium text-xl">Silakan tekan mikrofon atau ketuk di sini untuk mengetik...</span>}
                     </h2>
                   )}
                 </div>
