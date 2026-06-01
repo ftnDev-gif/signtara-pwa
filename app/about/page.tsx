@@ -3,10 +3,10 @@ import Link from "next/link";
 
 export default function AboutPage() {
   const teamMembers = [
-    { name: "Ryan", initials: "RY" },
-    { name: "Daffa", initials: "DF" },
-    { name: "Fatoni", initials: "FT" },
-    { name: "Tangkas", initials: "TK" },
+    { name: "Ryan", url: "/ryan.jpeg" },
+    { name: "Tangkas", url: "/tangkas.jpeg" },
+    { name: "Fatoni", url: "/fatoni.jpeg" },
+    { name: "Daffa", url: "/daffa.jpeg" },
   ];
 
   return (
@@ -66,7 +66,7 @@ export default function AboutPage() {
             {teamMembers.map((member, index) => (
               <div key={index} className="bg-white rounded-[2.5rem] p-3 pb-5 shadow-sm border border-gray-50 flex flex-col items-center">
                 <div className="w-full aspect-square rounded-full bg-[#FCF9F5] mb-3 flex items-center justify-center shadow-inner border border-gray-100">
-                  <span className="text-2xl font-bold text-[#5C3A21]">{member.initials}</span>
+                  <img src={member.url} className="w-full h-full object-cover rounded-full" />
                 </div>
                 <p className="font-bold text-[#5C3A21]">{member.name}</p>
               </div>
