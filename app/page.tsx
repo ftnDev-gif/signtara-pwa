@@ -1,29 +1,31 @@
-import { ArrowRight, Zap, ShieldCheck, Heart } from "lucide-react";
+import { ArrowRight, Zap, ShieldCheck, Heart, Hand } from "lucide-react";
 import Link from "next/link";
 
 export default function HomePage() {
   return (
     <div className="flex flex-col min-h-screen pb-24 relative bg-[#FCF9F5]">
+      
+      {/* Header Latar Putih Melengkung */}
       <div className="bg-white rounded-b-[2.5rem] pt-6 pb-6 px-6 shadow-sm flex justify-center items-center z-10 relative">
         <h1 className="text-2xl font-bold text-[#F97316] tracking-wide">Signtara</h1>
       </div>
 
       <div className="px-6 pt-8 animate-in fade-in duration-500">
+        
+        {/* Kartu Utama: Communication Bridge dengan Efek Glow */}
         <div className="relative mb-10 mt-2">
+          {/* Efek Blur Latar Belakang (Seperti Figma) */}
           <div className="absolute -top-4 -right-2 w-32 h-32 bg-[#FDEADD] rounded-full blur-2xl opacity-70"></div>
           <div className="absolute -bottom-4 -left-2 w-32 h-32 bg-[#E6F4EA] rounded-full blur-2xl opacity-70"></div>
           
+          {/* Kartu Asli */}
           <div className="relative bg-white/60 backdrop-blur-md rounded-[2.5rem] p-8 shadow-sm border border-white flex flex-col items-center text-center">
-            <div className="bg-[#EBB49E] w-16 h-16 rounded-full flex items-center justify-center mb-5 text-white shadow-inner overflow-hidden border border-gray-400">
-              <img 
-                src="/logo.png" 
-                alt="Logo Signtara" 
-                className="w-full h-full object-cover scale-110" 
-              />
+            <div className="bg-[#EBB49E] w-16 h-16 rounded-full flex items-center justify-center mb-5 text-white shadow-inner">
+              <Hand size={32} />
             </div>
-            <h2 className="text-xl font-bold text-[#5C3A21] mb-2">Jembatan Komunikasi</h2>
+            <h2 className="text-xl font-bold text-[#5C3A21] mb-2">Communication Bridge</h2>
             <p className="text-sm text-[#5C3A21] mb-8 font-medium">
-              Terhubung dengan lancar melalui terjemahan instan dan akurat.
+              Seamlessly connect through instant, accurate translation.
             </p>
             
             <Link 
@@ -35,6 +37,7 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Bagian: Kenapa Signtara? */}
         <div>
           <h3 className="text-lg font-bold text-[#5C3A21] mb-4 ml-1">Kenapa Signtara?</h3>
           
@@ -44,7 +47,7 @@ export default function HomePage() {
                 <Zap size={20} />
               </div>
               <p className="font-bold text-[#5C3A21] text-sm leading-tight">
-                Kecepatan<br/>Real-time
+                Real-time<br/>Speed
               </p>
             </div>
 
@@ -53,7 +56,7 @@ export default function HomePage() {
                 <ShieldCheck size={20} />
               </div>
               <p className="font-bold text-[#5C3A21] text-sm leading-tight">
-                Akurasi<br/>Tinggi
+                High<br/>Accuracy
               </p>
             </div>
           </div>
@@ -63,9 +66,9 @@ export default function HomePage() {
               <Heart size={20} />
             </div>
             <div>
-              <h4 className="font-bold text-[#5C3A21] text-sm mb-1">Komunitas Inklusif</h4>
+              <h4 className="font-bold text-[#5C3A21] text-sm mb-1">Inclusive Community</h4>
               <p className="text-xs text-[#5C3A21] font-medium leading-relaxed">
-                Dibangun untuk membuat komunikasi dapat diakses oleh semua orang.
+                Built to make communication accessible for everyone.
               </p>
             </div>
           </div>
