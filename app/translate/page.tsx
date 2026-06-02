@@ -11,6 +11,7 @@ export default function TranslatePage() {
   const [activeTab, setActiveTab] = useState("tuli");
   const [isTyping, setIsTyping] = useState(false);
   const [isCheckingMemory, setIsCheckingMemory] = useState(true);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [fontSize, setFontSize] = useState(32);
 
@@ -171,25 +172,49 @@ export default function TranslatePage() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (requestedMode?: string | React.MouseEvent) => {
+    const modeToUse = typeof requestedMode === "string" ? requestedMode : facingMode;
+
     try {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" } 
+        video: { facingMode: { exact: modeToUse } } 
       }); 
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        setIsCameraActive(true);
+        setFacingMode(modeToUse as "environment" | "user");
       }
-      setIsCameraActive(true);
-      
-      sequenceRef.current = [];
-      lastKeypointsRef.current = new Array(258).fill(0);
-      
-      processVideoFrame();
-
     } catch (err) {
-      console.error("Akses kamera ditolak atau error:", err);
-      alert("Gagal mengakses kamera. Pastikan Anda telah memberikan izin akses kamera pada browser.");
-      setIsCameraActive(false);
+      console.warn(`Kamera mode ${modeToUse} tidak tersedia, mencoba mode alternatif...`);
+      const fallbackMode = modeToUse === "environment" ? "user" : "environment";
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: fallbackMode } 
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = fallbackStream;
+          setIsCameraActive(true);
+          setFacingMode(fallbackMode);
+        }
+      } catch (fallbackErr) {
+        alert("Gagal mengakses kamera. Pastikan izin kamera telah diberikan.");
+        setIsCameraActive(false);
+      }
+    }
+  };
+
+  const handleToggleCamera = () => {
+    const newMode = facingMode === "environment" ? "user" : "environment";
+    if (isCameraActive) {
+      startCamera(newMode);
+    } else {
+      setFacingMode(newMode);
     }
   };
 
@@ -349,7 +374,13 @@ export default function TranslatePage() {
           {activeTab === "tuli" ? (
             <div className="flex flex-col h-full animate-in slide-in-from-left-4 duration-300">
               <div className="relative w-full aspect-[4/5] bg-gray-300 rounded-[3rem] overflow-hidden border-4 border-white shadow-xl mb-6 flex flex-col items-center justify-center bg-black shrink-0">
-                <video ref={videoRef} autoPlay playsInline muted className={`absolute inset-0 w-full h-full object-cover ${isCameraActive ? 'opacity-100' : 'opacity-0'}`} />
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  className={`absolute inset-0 w-full h-full object-cover ${isCameraActive ? 'opacity-100' : 'opacity-0'} ${facingMode === "user" ? "scale-x-[-1]" : ""}`} 
+                />
                 {!isCameraActive ? (
                   <button onClick={startCamera} className="flex flex-col items-center gap-3 group z-10">
                     <div className="w-16 h-16 bg-white/80 rounded-full flex items-center justify-center text-[#F97316] group-hover:scale-110 transition-transform shadow-lg"><Play size={32} className="ml-1" /></div>
@@ -357,9 +388,28 @@ export default function TranslatePage() {
                   </button>
                 ) : (
                   <>
-                    <button onClick={stopCamera} className="absolute top-4 right-4 bg-white/80 p-3 rounded-full text-red-500 shadow-sm hover:bg-white transition-colors z-10"><Square size={20} fill="currentColor" /></button>
+                    <button onClick={stopCamera} className="absolute top-4 right-4 bg-white/80 p-3 rounded-full text-red-500 shadow-sm hover:bg-white transition-colors z-10">
+                      <Square size={20} fill="currentColor" />
+                    </button>
+
+                    <button 
+                      onClick={handleToggleCamera}
+                      className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm p-3 rounded-full text-white shadow-md hover:bg-black/60 transition-colors active:scale-95 z-10"
+                      title="Tukar Kamera"
+                    >
+                      <RefreshCw size={20} />
+                    </button>
+
+                    <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full text-white flex items-center gap-2 z-10 shadow-sm">
+                      <CameraIcon size={14} />
+                      <span className="text-[10px] font-bold tracking-wider uppercase">
+                        {facingMode === "environment" ? "Belakang" : "Depan"}
+                      </span>
+                    </div>
+
                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md px-4 py-2 rounded-full border border-white flex items-center gap-2 shadow-sm z-10">
-                      <div className="w-2 h-2 rounded-full animate-pulse bg-[#F97316]" /><span className="text-[10px] font-bold uppercase tracking-wider text-[#5C3A21]">Teman Tuli Mode</span>
+                      <div className="w-2 h-2 rounded-full animate-pulse bg-[#F97316]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#5C3A21]">Teman Tuli Mode</span>
                     </div>
                   </>
                 )}
@@ -389,20 +439,20 @@ export default function TranslatePage() {
                   
                   <span className="text-lg font-bold text-gray-400">TT</span>
                   
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button 
                       onClick={() => {
                         saveToHistory(sentence.join(" "), "Teman Tuli");
                         alert("Tersimpan di Riwayat!"); 
                       }}
-                      className="bg-[#E6F3FA] p-3 rounded-full text-blue-600 hover:bg-blue-100 transition-colors active:scale-95" 
+                      className="bg-[#E6F3FA] p-3 rounded-full text-blue-600 hover:bg-blue-100 transition-colors active:scale-95 shrink-0" 
                       title="Simpan ke Riwayat"
                     >
                       <Bookmark size={20} />
                     </button>
                     <button 
                       onClick={() => setIsAutoSpeak(!isAutoSpeak)}
-                      className={`p-3 rounded-full transition-colors active:scale-95 ${isAutoSpeak ? 'bg-green-500 text-white shadow-md' : 'bg-[#EBF5EE] text-green-600 hover:bg-green-100'}`}
+                      className={`p-3 rounded-full transition-colors active:scale-95 shrink-0 ${isAutoSpeak ? 'bg-green-500 text-white shadow-md' : 'bg-[#EBF5EE] text-green-600 hover:bg-green-100'}`}
                       title={isAutoSpeak ? "Matikan Suara Otomatis" : "Nyalakan Suara Otomatis"}
                     >
                       <Volume2 size={20} />
